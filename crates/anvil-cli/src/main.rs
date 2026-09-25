@@ -12,10 +12,11 @@ use anvil_tui::{App, SlashAction};
 use anvil_tui::app::ConnectSettings;
 use clap::{Parser, Subcommand};
 use crossterm::{
-    event::{self, Event, KeyCode, KeyModifiers},
+    event::{Event, EventStream, KeyCode, KeyModifiers},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
+use futures_util::StreamExt;
 use ratatui::{backend::CrosstermBackend, Terminal};
 use tokio::sync::{mpsc, oneshot, watch};
 
@@ -372,6 +373,12 @@ async fn run_loop(
         status: format!("model: {}  tokens: —  latency: —", app.model),
     })?;
 
+    // Keys arrive via an async event stream so input is handled the moment
+    // it is typed (no polling delay); the ticker only drives repaints.
+    let mut keys = EventStream::new();
+    let mut ticker = tokio::time::interval(Duration::from_millis(100));
+    ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
     loop {
         app.tick_spinner();
         terminal.draw(|f| anvil_tui::ui::render(f, app))?;
@@ -396,17 +403,16 @@ async fn run_loop(
                 app.on_agent_event(AgentEvent::ApprovalRequired(job.request));
                 persist(app);
             }
-            _ = tokio::time::sleep(Duration::from_millis(100)) => {
-                // spinner tick / repaint
-                if event::poll(Duration::from_millis(0))? {
-                    if let Event::Key(key) = event::read()? {
-                        if handle_key(app, rt, key.code, key.modifiers, agent_tx) {
-                            persist(app);
-                            break;
-                        }
+            key_ev = keys.next() => {
+                if let Some(Ok(Event::Key(key))) = key_ev {
+                    if handle_key(app, rt, key.code, key.modifiers, agent_tx) {
+                        persist(app);
+                        break;
                     }
                 }
+                // Resize and other events: fall through to repaint.
             }
+            _ = ticker.tick() => {}
         }
     }
     // Quitting with work in flight (Ctrl+C mid-run): abort so no agent
@@ -486,6 +492,11 @@ fn handle_key(
             KeyCode::Char('c') if mods.contains(KeyModifiers::CONTROL) => {
                 app.connect_form = None;
             }
+            // Ctrl+D fills the default OpenCode URL + model; only the key
+            // is left to type. (A bare `d` would be ambiguous with typing.)
+            KeyCode::Char('d') | KeyCode::Char('D') if mods.contains(KeyModifiers::CONTROL) => {
+                app.connect_fill_defaults();
+            }
             KeyCode::Char(c) => {
                 if !mods.contains(KeyModifiers::CONTROL)
                     && !mods.contains(KeyModifiers::ALT)
@@ -541,8 +552,8 @@ fn handle_key(
             app.should_quit = true;
             return true;
         }
-        KeyCode::Up => app.scroll_up(1),
-        KeyCode::Down => app.scroll_down(1),
+        KeyCode::Up => app.history_prev(),
+        KeyCode::Down => app.history_next(),
         KeyCode::PageUp => app.scroll_up(10),
         KeyCode::PageDown => app.scroll_down(10),
         KeyCode::Left => app.move_cursor_left(),

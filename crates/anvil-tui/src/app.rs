@@ -105,6 +105,12 @@ pub struct App {
     pub input: String,
     /// Byte index into `input` for the cursor.
     pub cursor: usize,
+    /// Previously submitted input lines, oldest first (opencode-style ↑/↓ recall).
+    pub input_history: Vec<String>,
+    /// Browse position into `input_history`, or None when showing live input.
+    pub hist_index: Option<usize>,
+    /// Live input stashed when history browsing starts.
+    pub hist_draft: String,
     /// Fire-and-forget background jobs (`/diff`, …) currently running.
     pub background_tasks: usize,
     /// Scroll offset in lines from the top of the wrapped transcript.
@@ -148,6 +154,9 @@ impl App {
             thinking: false,
             input: String::new(),
             cursor: 0,
+            input_history: Vec::new(),
+            hist_index: None,
+            hist_draft: String::new(),
             background_tasks: 0,
             scroll: 0,
             follow: true,
@@ -204,6 +213,7 @@ impl App {
         self.cursor += c.len_utf8();
         self.slash_selected = 0;
         self.slash_dismissed = false;
+        self.hist_index = None;
     }
 
     pub fn insert_newline(&mut self) {
@@ -223,6 +233,7 @@ impl App {
         self.cursor = prev;
         self.slash_selected = 0;
         self.slash_dismissed = false;
+        self.hist_index = None;
     }
 
     pub fn move_cursor_left(&mut self) {
@@ -253,7 +264,52 @@ impl App {
         self.cursor = 0;
         self.slash_selected = 0;
         self.slash_dismissed = false;
+        self.hist_index = None;
+        self.hist_draft.clear();
+        // Record submissions for ↑/↓ recall; skip blanks and repeats.
+        if !s.trim().is_empty() && self.input_history.last().map(|l| l != &s).unwrap_or(true) {
+            self.input_history.push(s.clone());
+        }
         s
+    }
+
+    /// Recall the previous submitted line (↑). Stashes live input on first step.
+    pub fn history_prev(&mut self) {
+        if self.input_history.is_empty() {
+            return;
+        }
+        let idx = match self.hist_index {
+            None => {
+                self.hist_draft = self.input.clone();
+                self.input_history.len() - 1
+            }
+            Some(0) => return,
+            Some(i) => i - 1,
+        };
+        self.hist_index = Some(idx);
+        self.input = self.input_history[idx].clone();
+        self.cursor = self.input.len();
+        self.slash_selected = 0;
+        self.slash_dismissed = false;
+    }
+
+    /// Recall the next submitted line (↓); stepping past the end restores the draft.
+    pub fn history_next(&mut self) {
+        let idx = match self.hist_index {
+            None => return,
+            Some(i) => i + 1,
+        };
+        if idx >= self.input_history.len() {
+            self.hist_index = None;
+            self.input = std::mem::take(&mut self.hist_draft);
+            self.cursor = self.input.len();
+        } else {
+            self.hist_index = Some(idx);
+            self.input = self.input_history[idx].clone();
+            self.cursor = self.input.len();
+        }
+        self.slash_selected = 0;
+        self.slash_dismissed = false;
     }
 
     // ---- scrolling ----
@@ -546,6 +602,18 @@ impl App {
         }
     }
 
+    /// Fill URL + Model with the built-in OpenCode defaults, so the user
+    /// only has to type their API key. The key field is left untouched.
+    pub fn connect_fill_defaults(&mut self) {
+        if let Some(f) = self.form_mut() {
+            f.values[CONNECT_URL] = anvil_core::DEFAULT_BASE_URL.to_string();
+            f.values[CONNECT_MODEL] = anvil_core::DEFAULT_MODEL.to_string();
+            f.cursors[CONNECT_URL] = f.values[CONNECT_URL].len();
+            f.cursors[CONNECT_MODEL] = f.values[CONNECT_MODEL].len();
+            f.error = None;
+        }
+    }
+
     /// Validate the form. On success the caller applies + persists the
     /// settings; on failure the error is shown in the form.
     pub fn connect_submit(&mut self) -> Result<ConnectSettings, String> {
@@ -810,6 +878,77 @@ mod tests {
     use serde_json::json;
 
     #[test]
+    fn input_history_recall_and_draft_restore() {
+        let mut app = App::new("m");
+        // empty history: Up/Down are no-ops
+        app.history_prev();
+        assert_eq!(app.input, "");
+        app.history_next();
+        assert_eq!(app.input, "");
+
+        // submit two lines
+        for c in "first".chars() {
+            app.insert_char(c);
+        }
+        assert_eq!(app.take_input(), "first");
+        for c in "second".chars() {
+            app.insert_char(c);
+        }
+        assert_eq!(app.take_input(), "second");
+
+        // Up walks back, Down walks forward, past-the-end restores draft
+        for c in "draft".chars() {
+            app.insert_char(c);
+        }
+        app.history_prev();
+        assert_eq!(app.input, "second");
+        app.history_prev();
+        assert_eq!(app.input, "first");
+        app.history_prev(); // stays at oldest
+        assert_eq!(app.input, "first");
+        app.history_next();
+        assert_eq!(app.input, "second");
+        app.history_next();
+        assert_eq!(app.input, "draft");
+        assert_eq!(app.hist_index, None);
+        // Down with no browse active is a no-op
+        app.history_next();
+        assert_eq!(app.input, "draft");
+    }
+
+    #[test]
+    fn input_history_skips_blanks_and_repeats() {
+        let mut app = App::new("m");
+        app.input = "   ".to_string();
+        app.take_input();
+        assert!(app.input_history.is_empty());
+        for c in "x".chars() {
+            app.insert_char(c);
+        }
+        app.take_input();
+        app.input = "x".to_string();
+        app.take_input();
+        assert_eq!(app.input_history, vec!["x".to_string()]);
+    }
+
+    #[test]
+    fn editing_exits_history_browse() {
+        let mut app = App::new("m");
+        for c in "one".chars() {
+            app.insert_char(c);
+        }
+        app.take_input();
+        app.history_prev();
+        assert_eq!(app.input, "one");
+        app.insert_char('!');
+        assert_eq!(app.hist_index, None);
+        assert_eq!(app.input, "one!");
+        // submitting the edited recall records a new entry
+        assert_eq!(app.take_input(), "one!");
+        assert_eq!(app.input_history, vec!["one".to_string(), "one!".to_string()]);
+    }
+
+    #[test]
     fn streaming_deltas_accumulate_and_flush_on_tool() {
         let mut app = App::new("cpp-agent");
         app.on_agent_event(AgentEvent::Thinking);
@@ -1009,6 +1148,28 @@ mod tests {
         app.connect_prev();
         assert_eq!(app.connect_form.as_ref().unwrap().focused, CONNECT_MODEL);
         assert_eq!(App::mask_key("secret"), "••••••");
+    }
+
+    #[test]
+    fn connect_fill_defaults_sets_url_and_model_only() {
+        let mut app = App::new("custom-model");
+        app.base_url = "https://custom.example/v1".to_string();
+        app.open_connect();
+        // scribble custom values + a key, focus the key field
+        let form = app.connect_form.as_mut().unwrap();
+        form.values[CONNECT_URL] = "https://custom.example/v1".to_string();
+        form.values[CONNECT_MODEL] = "custom-model".to_string();
+        form.values[CONNECT_KEY] = "sk-abc".to_string();
+        form.focused = CONNECT_KEY;
+        app.connect_fill_defaults();
+        let form = app.connect_form.as_ref().unwrap();
+        assert_eq!(form.values[CONNECT_URL], anvil_core::DEFAULT_BASE_URL);
+        assert_eq!(form.values[CONNECT_MODEL], anvil_core::DEFAULT_MODEL);
+        assert_eq!(form.values[CONNECT_KEY], "sk-abc");
+        assert_eq!(form.focused, CONNECT_KEY);
+        assert_eq!(form.cursors[CONNECT_URL], form.values[CONNECT_URL].len());
+        // defaults submit cleanly
+        assert!(app.connect_submit().is_ok());
     }
 
     #[test]

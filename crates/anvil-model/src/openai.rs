@@ -151,7 +151,18 @@ impl ModelProvider for OpenAiCompatible {
             )));
         }
         if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
-            return Err(ModelError::RateLimited(format!("HTTP {status}")));
+            return Err(ModelError::RateLimited(format!(
+                "HTTP {status} — rate limited; wait a minute and retry, or shrink context with /compact"
+            )));
+        }
+        if status.as_u16() == 413 {
+            let text = resp.text().await.unwrap_or_default();
+            let short: String = text.chars().take(300).collect();
+            return Err(ModelError::TooLarge {
+                limit: parse_number_after(&text, "Limit "),
+                requested: parse_number_after(&text, "Requested "),
+                detail: format!("Server said: {short}"),
+            });
         }
         if status == reqwest::StatusCode::NOT_FOUND {
             let text = resp.text().await.unwrap_or_default();
@@ -351,6 +362,19 @@ fn reqwest_error_chain(e: &reqwest::Error) -> String {
     msg
 }
 
+/// Parse the first integer after a marker, e.g. `8000` after `"Limit "` in
+/// `"Limit 8000, Requested 9933"`. Returns None when absent/unparseable.
+fn parse_number_after(text: &str, marker: &str) -> Option<u64> {
+    let i = text.find(marker)? + marker.len();
+    text[i..]
+        .chars()
+        .skip_while(|c| *c == ',' || c.is_whitespace())
+        .take_while(|c| c.is_ascii_digit())
+        .collect::<String>()
+        .parse()
+        .ok()
+}
+
 fn strip_spaces(mut b: &[u8]) -> &[u8] {
     while let Some((&first, rest)) = b.split_first() {
         if first == b' ' || first == b'\t' {
@@ -455,6 +479,37 @@ mod tests {
         let msg = err.to_string();
         assert!(msg.contains("404"), "{msg}");
         assert!(msg.contains("model id"), "{msg}");
+    }
+
+    #[tokio::test]
+    async fn payload_too_large_maps_to_toolarge_with_numbers() {
+        let body = "{\"error\":{\"message\":\"Request too large for model `m` in organization `o` service tier `t` on tokens per minute (TPM): Limit 8000, Requested 9933\"}}";
+        let raw = format!(
+            "HTTP/1.1 413 Payload Too Large\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
+            body.len(),
+            body
+        );
+        let raw: &'static str = Box::leak(raw.into_boxed_str());
+        let base = stub_server(Stub::Respond(raw)).await;
+        let p = OpenAiCompatible::new(&base, "k");
+        let (req, rx) = test_request();
+        let err = p.chat(req, rx).await.unwrap_err();
+        match err {
+            ModelError::TooLarge { limit, requested, .. } => {
+                assert_eq!(limit, Some(8000));
+                assert_eq!(requested, Some(9933));
+            }
+            other => panic!("expected TooLarge, got {other:?}"),
+        }
+        assert!(err.to_string().contains("/compact"), "{}", err.to_string());
+    }
+
+    #[test]
+    fn parse_number_after_handles_variants() {
+        assert_eq!(parse_number_after("Limit 8000, Requested 9933", "Limit "), Some(8000));
+        assert_eq!(parse_number_after("Limit 8000, Requested 9933", "Requested "), Some(9933));
+        assert_eq!(parse_number_after("no numbers here", "Limit "), None);
+        assert_eq!(parse_number_after("Limit abc", "Limit "), None);
     }
 
     #[tokio::test]

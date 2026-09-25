@@ -11,6 +11,9 @@ pub enum ModelError {
     Transport(String),
     Auth(String),
     RateLimited(String),
+    /// Request exceeded a provider size/rate limit. Carries parsed numbers
+    /// when the server reports them, so callers can shrink and retry.
+    TooLarge { limit: Option<u64>, requested: Option<u64>, detail: String },
     BadRequest(String),
     Parse(String),
     Cancelled,
@@ -22,6 +25,15 @@ impl std::fmt::Display for ModelError {
             ModelError::Transport(e) => write!(f, "model transport error: {e}"),
             ModelError::Auth(e) => write!(f, "model auth error: {e}"),
             ModelError::RateLimited(e) => write!(f, "model rate limited: {e}"),
+            ModelError::TooLarge { limit, requested, detail } => {
+                match (limit, requested) {
+                    (Some(l), Some(r)) => write!(
+                        f,
+                        "request too large ({r} tokens vs {l} limit) — shrink context with /compact or raise the tier. {detail}"
+                    ),
+                    _ => write!(f, "request too large — shrink context with /compact. {detail}"),
+                }
+            }
             ModelError::BadRequest(e) => write!(f, "model rejected request: {e}"),
             ModelError::Parse(e) => write!(f, "model response parse error: {e}"),
             ModelError::Cancelled => write!(f, "model request cancelled"),

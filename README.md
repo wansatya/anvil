@@ -338,7 +338,12 @@ what `install.sh` downloads:
 ./deploy.sh --dry-run  # show what would happen
 ```
 
-`deploy.sh` requires a clean tree and passing tests, then pushes the tag.
+`deploy.sh` requires a clean tree, then syncs the repo version to the tag:
+passing `v0.2.0` bumps `version` in every `crates/*/Cargo.toml` (+ `Cargo.lock`)
+and commits it as `release v0.2.0`, so the TUI footer, `anvil version`, and the
+git tag always agree. Omitting the tag reuses the Cargo version with no bump.
+Tests gate the release; then the branch (if a bump was committed) and the tag
+are pushed.
 `.github/workflows/release.yml` takes it from there: tests + release build
 per platform (`linux-x86_64`, `macos-aarch64`, `windows-x86_64`), and uploads
 `anvil-<platform>.tar.gz`, the raw binary, and checksums to the release.

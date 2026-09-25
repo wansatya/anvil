@@ -339,11 +339,12 @@ pub fn render(f: &mut Frame, app: &mut App) {
         .constraints([Constraint::Min(0), Constraint::Length(version_text.len() as u16)])
         .split(chunks[3]);
     let footer = Paragraph::new(Line::from(vec![
-        Span::styled(" ↑↓ scroll ", Style::default().fg(Color::DarkGray)),
+        Span::styled(" ↑↓ history ", Style::default().fg(Color::DarkGray)),
         Span::styled(" Enter send ", Style::default().fg(Color::DarkGray)),
         Span::styled(" / commands ", Style::default().fg(Color::DarkGray)),
         Span::styled(" Esc stop ", Style::default().fg(Color::DarkGray)),
         Span::styled(" Ctrl+C exit ", Style::default().fg(Color::DarkGray)),
+        Span::styled(" PgUp/PgDn scroll ", Style::default().fg(Color::DarkGray)),
         Span::styled(" ? help ", Style::default().fg(Color::DarkGray)),
     ]));
     f.render_widget(footer, foot_chunks[0]);
@@ -426,7 +427,11 @@ pub fn render(f: &mut Frame, app: &mut App) {
             ]));
         }
         text.push(Line::from(Span::styled(
-            " [Tab] switch field   [Enter] save   [Esc] cancel ",
+            " [Tab] switch field   [Ctrl+D] fill defaults",
+            Style::default().fg(Color::Cyan),
+        )));
+        text.push(Line::from(Span::styled(
+            " [Enter] save   [Esc] cancel",
             Style::default().fg(Color::Cyan),
         )));
         let h = (text.len() as u16 + 2).min(area.height.max(1));
