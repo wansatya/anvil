@@ -69,7 +69,7 @@ dependencies = [
 
 [[package]]
 name = "anvil-cli"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "anvil-core",
  "anvil-mcp",
@@ -91,7 +91,7 @@ dependencies = [
 
 [[package]]
 name = "anvil-core"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "anvil-model",
  "anvil-skills",
@@ -106,7 +106,7 @@ dependencies = [
 
 [[package]]
 name = "anvil-mcp"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "anvil-tools",
  "anyhow",
@@ -118,7 +118,7 @@ dependencies = [
 
 [[package]]
 name = "anvil-model"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -131,7 +131,7 @@ dependencies = [
 
 [[package]]
 name = "anvil-skills"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "serde",
@@ -139,7 +139,7 @@ dependencies = [
 
 [[package]]
 name = "anvil-tools"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "anvil-model",
  "anyhow",
@@ -152,7 +152,7 @@ dependencies = [
 
 [[package]]
 name = "anvil-tui"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "anvil-core",
  "anvil-model",
