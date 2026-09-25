@@ -1,0 +1,25 @@
+[package]
+name = "anvil-cli"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "anvil"
+path = "src/main.rs"
+
+[dependencies]
+anvil-core = { workspace = true }
+anvil-mcp = { workspace = true }
+anvil-model = { workspace = true }
+anvil-skills = { workspace = true }
+anvil-tools = { workspace = true }
+anvil-tui = { workspace = true }
+async-trait = { workspace = true }
+clap = { workspace = true }
+tokio = { workspace = true }
+ratatui = { workspace = true }
+crossterm = { workspace = true }
+anyhow = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = "0.9"

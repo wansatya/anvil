@@ -1,0 +1,13 @@
+[package]
+name = "anvil-model"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+tokio = { workspace = true }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-manual-roots", "stream", "json"] }
+futures-util = "0.3"

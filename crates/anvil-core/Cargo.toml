@@ -1,0 +1,15 @@
+[package]
+name = "anvil-core"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anvil-model = { workspace = true }
+anvil-tools = { workspace = true }
+anvil-skills = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+tokio = { workspace = true }
+ignore = "0.4"

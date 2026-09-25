@@ -1,0 +1,67 @@
+# Builds release binaries on GitHub's machines and attaches them to the
+# GitHub Release for the pushed tag. Nothing under target/ is ever
+# committed — install.sh downloads these assets instead.
+#
+# Asset naming must stay in sync with install.sh:
+#   anvil-<os>-<arch>.tar.gz   (binary at archive root)
+#   anvil-<os>-<arch>[.exe]    (raw fallback)
+
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    name: build (${{ matrix.plat }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            plat: linux-x86_64
+            exe: ""
+          - runner: macos-latest
+            plat: macos-aarch64
+            exe: ""
+          - runner: windows-latest
+            plat: windows-x86_64
+            exe: .exe
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Test
+        run: cargo test --workspace --locked
+
+      - name: Build release
+        run: cargo build --release --locked -p anvil-cli
+
+      - name: Strip (unix)
+        if: runner.os != 'Windows'
+        run: strip target/release/anvil
+
+      - name: Stage artifacts
+        run: |
+          mkdir -p dist
+          cp "target/release/anvil${{ matrix.exe }}" "dist/anvil-${{ matrix.plat }}${{ matrix.exe }}"
+          tar -czf "dist/anvil-${{ matrix.plat }}.tar.gz" -C dist "anvil-${{ matrix.plat }}${{ matrix.exe }}"
+          (cd dist && sha256sum -- * > "SHA256SUMS-${{ matrix.plat }}.txt")
+
+      - name: Attach to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/anvil-${{ matrix.plat }}.tar.gz
+            dist/anvil-${{ matrix.plat }}${{ matrix.exe }}
+            dist/SHA256SUMS-${{ matrix.plat }}.txt

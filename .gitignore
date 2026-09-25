@@ -1,0 +1,15 @@
+# Rust build output — never commit this (gigabytes of intermediates).
+# Release binaries ship via GitHub Releases, built by Actions (see
+# .github/workflows/release.yml), which is what install.sh downloads.
+/target/
+
+# Local secrets / environment.
+.env
+.env.*
+
+# Editor / OS noise.
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store

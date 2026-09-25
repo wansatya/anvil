@@ -1,0 +1,27 @@
+[workspace]
+members = [
+    "crates/anvil-cli",
+    "crates/anvil-core",
+    "crates/anvil-model",
+    "crates/anvil-tools",
+    "crates/anvil-mcp",
+    "crates/anvil-skills",
+    "crates/anvil-tui",
+]
+resolver = "2"
+
+[workspace.dependencies]
+anvil-core = { path = "crates/anvil-core" }
+anvil-model = { path = "crates/anvil-model" }
+anvil-tools = { path = "crates/anvil-tools" }
+anvil-mcp = { path = "crates/anvil-mcp" }
+anvil-skills = { path = "crates/anvil-skills" }
+anvil-tui = { path = "crates/anvil-tui" }
+tokio = { version = "1", features = ["full"] }
+ratatui = "0.29"
+crossterm = "0.28"
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+async-trait = "0.1"
