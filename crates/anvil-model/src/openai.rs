@@ -145,9 +145,16 @@ impl ModelProvider for OpenAiCompatible {
                 }
             })?;
         let status = resp.status();
-        if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
+        if status == reqwest::StatusCode::UNAUTHORIZED {
             return Err(ModelError::Auth(format!(
-                "HTTP {status} — check the API key (and that it belongs to this provider)"
+                "HTTP {status} — invalid or expired API key. Re-enter it via /connect."
+            )));
+        }
+        if status == reqwest::StatusCode::FORBIDDEN {
+            return Err(ModelError::Auth(format!(
+                "HTTP {status} — the key is not allowed for this request: it may belong to a \
+                 different provider (Zen key vs Groq key), lack access to this model/tier, or be \
+                 restricted. Verify URL + model + key with /connect and `anvil doctor`."
             )));
         }
         if status == reqwest::StatusCode::TOO_MANY_REQUESTS {

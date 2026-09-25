@@ -509,8 +509,10 @@ fn handle_key(
         return false;
     }
 
-    // --- `/` autocomplete palette is open: nav keys go to the palette ---
-    if !app.slash_matches().is_empty() {
+    // --- `/` palette navigation (↑/↓/Ctrl+N/P) ---
+    // Only when there is something to navigate: an exact single match
+    // (e.g. a recalled `/models`) leaves ↑/↓ on input history.
+    if app.slash_nav_active() {
         match code {
             KeyCode::Up => {
                 app.slash_prev();
@@ -520,20 +522,27 @@ fn handle_key(
                 app.slash_next();
                 return false;
             }
-            KeyCode::Tab => {
-                app.slash_accept();
-                return false;
-            }
-            KeyCode::Esc => {
-                app.slash_dismiss();
-                return false;
-            }
             KeyCode::Char('n') if mods.contains(KeyModifiers::CONTROL) => {
                 app.slash_next();
                 return false;
             }
             KeyCode::Char('p') if mods.contains(KeyModifiers::CONTROL) => {
                 app.slash_prev();
+                return false;
+            }
+            _ => {}
+        }
+    }
+
+    // --- `/` palette accept/dismiss (whenever any match is showing) ---
+    if !app.slash_matches().is_empty() {
+        match code {
+            KeyCode::Tab => {
+                app.slash_accept();
+                return false;
+            }
+            KeyCode::Esc => {
+                app.slash_dismiss();
                 return false;
             }
             _ => {}

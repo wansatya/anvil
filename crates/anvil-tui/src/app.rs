@@ -484,6 +484,22 @@ impl App {
         self.slash_matches().len()
     }
 
+    /// Whether ↑/↓ (etc.) should drive the palette instead of input history.
+    /// A single match that already equals the input needs no navigation —
+    /// without this, recalling an exact `/command` traps ↑/↓ in the palette
+    /// (a one-item wrap) and older history becomes unreachable.
+    pub fn slash_nav_active(&self) -> bool {
+        let matches = self.slash_matches();
+        match matches.len() {
+            0 => false,
+            1 => {
+                let token = self.input.trim().split_whitespace().next().unwrap_or("");
+                token.to_lowercase() != matches[0].0
+            }
+            _ => true,
+        }
+    }
+
     pub fn slash_next(&mut self) {
         let n = self.slash_count();
         if n > 0 {
@@ -1078,6 +1094,66 @@ mod tests {
         app.move_cursor_left();
         app.backspace();
         assert_eq!(app.input, "hi!");
+    }
+
+    #[test]
+    fn slash_nav_inactive_for_exact_match() {
+        let mut app = App::new("m");
+        // partial prefix with several matches -> navigation active
+        for c in "/mo".chars() {
+            app.insert_char(c);
+        }
+        assert!(app.slash_nav_active());
+        // exact command -> no navigation (↑/↓ stay on history)
+        app.input.clear();
+        app.cursor = 0;
+        for c in "/models".chars() {
+            app.insert_char(c);
+        }
+        assert_eq!(app.slash_matches().len(), 1);
+        assert!(!app.slash_nav_active());
+        // partial prefix with one match -> still navigable
+        app.input.clear();
+        app.cursor = 0;
+        for c in "/hist".chars() {
+            app.insert_char(c);
+        }
+        assert_eq!(app.slash_matches().len(), 1);
+        assert!(app.slash_nav_active());
+        // no match / plain text -> inactive
+        app.input.clear();
+        app.cursor = 0;
+        for c in "hello".chars() {
+            app.insert_char(c);
+        }
+        assert!(!app.slash_nav_active());
+    }
+
+    #[test]
+    fn history_recall_reaches_past_slash_command() {
+        let mut app = App::new("m");
+        // submit plain text, then a slash command, then plain text
+        for c in "first".chars() {
+            app.insert_char(c);
+        }
+        app.take_input();
+        for c in "/models".chars() {
+            app.insert_char(c);
+        }
+        app.take_input();
+        for c in "third".chars() {
+            app.insert_char(c);
+        }
+        app.take_input();
+        // walk back through all three, including the slash command
+        app.history_prev();
+        assert_eq!(app.input, "third");
+        app.history_prev();
+        assert_eq!(app.input, "/models");
+        // recalled exact match must not trap navigation
+        assert!(!app.slash_nav_active());
+        app.history_prev();
+        assert_eq!(app.input, "first");
     }
 
     #[test]
