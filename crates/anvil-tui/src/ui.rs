@@ -78,20 +78,35 @@ fn entry_lines(entry: &TranscriptEntry) -> Vec<Line<'static>> {
             }
             out
         }
-        TranscriptEntry::Error(msg) => vec![
-            Line::from(vec![
-                Span::raw("  "),
-                Span::styled(format!("Error: {msg}"), Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
-            ]),
-            Line::from(""),
-        ],
-        TranscriptEntry::System(msg) => vec![
-            Line::from(vec![
-                Span::raw("  "),
-                Span::styled(msg.clone(), Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)),
-            ]),
-            Line::from(""),
-        ],
+        TranscriptEntry::Error(msg) => {
+            let mut out = Vec::new();
+            for (i, l) in msg.lines().enumerate() {
+                let text = if i == 0 { format!("Error: {l}") } else { l.to_string() };
+                out.push(Line::from(vec![
+                    Span::raw("  "),
+                    Span::styled(text, Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
+                ]));
+            }
+            if out.is_empty() {
+                out.push(Line::from(""));
+            }
+            out.push(Line::from(""));
+            out
+        }
+        TranscriptEntry::System(msg) => {
+            let mut out = Vec::new();
+            for l in msg.lines() {
+                out.push(Line::from(vec![
+                    Span::raw("  "),
+                    Span::styled(l.to_string(), Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)),
+                ]));
+            }
+            if out.is_empty() {
+                out.push(Line::from(""));
+            }
+            out.push(Line::from(""));
+            out
+        }
     }
 }
 
@@ -313,7 +328,16 @@ pub fn render(f: &mut Frame, app: &mut App) {
         }
     }
 
-    // ---- footer ----
+    // ---- footer: key hints left, release version right ----
+    let version_text = if app.version.is_empty() {
+        String::new()
+    } else {
+        format!(" v{} ", app.version)
+    };
+    let foot_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Min(0), Constraint::Length(version_text.len() as u16)])
+        .split(chunks[3]);
     let footer = Paragraph::new(Line::from(vec![
         Span::styled(" ↑↓ scroll ", Style::default().fg(Color::DarkGray)),
         Span::styled(" Enter send ", Style::default().fg(Color::DarkGray)),
@@ -322,7 +346,17 @@ pub fn render(f: &mut Frame, app: &mut App) {
         Span::styled(" Ctrl+C exit ", Style::default().fg(Color::DarkGray)),
         Span::styled(" ? help ", Style::default().fg(Color::DarkGray)),
     ]));
-    f.render_widget(footer, chunks[3]);
+    f.render_widget(footer, foot_chunks[0]);
+    if !version_text.is_empty() {
+        f.render_widget(
+            Paragraph::new(Line::from(Span::styled(
+                version_text,
+                Style::default().fg(Color::DarkGray),
+            )))
+            .alignment(Alignment::Right),
+            foot_chunks[1],
+        );
+    }
 
     // ---- approval modal (SPEC §12) ----
     if let Some(req) = &app.pending_approval {

@@ -245,9 +245,18 @@ fn spawn_agent_task(rt: &mut Runtime, agent_tx: &mpsc::UnboundedSender<AgentEven
     rt.running = true;
     let tx = agent_tx.clone();
     rt.task = Some(tokio::spawn(async move {
-        // Completion state arrives as events; nothing to send here.
-        let mut h = history.lock().await;
-        let _ = agent.run(prompt, &mut h, tx, cancel_rx, approvals).await;
+        // Completion state arrives as events; nothing to send on success.
+        // A panic must ALSO surface as an event — otherwise the UI sticks
+        // on "working…" with input blocked (same as a silent error).
+        let run = std::panic::AssertUnwindSafe(async {
+            let mut h = history.lock().await;
+            agent.run(prompt, &mut h, tx.clone(), cancel_rx, approvals).await
+        });
+        if futures_util::FutureExt::catch_unwind(run).await.is_err() {
+            let _ = tx.send(AgentEvent::Error(
+                "agent task panicked — run aborted; please report this bug.".into(),
+            ));
+        }
     }));
 }
 
@@ -279,6 +288,7 @@ fn force_stop(app: &mut App, rt: &mut Runtime) {
 async fn run_tui(resume: Option<String>) -> anyhow::Result<()> {
     let cfg = config::load();
     let mut app = App::new(&cfg.model);
+    app.version = env!("CARGO_PKG_VERSION").to_string();
     app.base_url = cfg.base_url.clone();
     app.workspace = cfg.workspace.clone();
     app.status = format!("model: {}  tokens: —  latency: —", cfg.model);

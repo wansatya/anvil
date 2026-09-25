@@ -16,6 +16,7 @@ anvil-tools = { workspace = true }
 anvil-tui = { workspace = true }
 async-trait = { workspace = true }
 clap = { workspace = true }
+futures-util = "0.3"
 tokio = { workspace = true }
 ratatui = { workspace = true }
 crossterm = { workspace = true }

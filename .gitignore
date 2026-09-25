@@ -2,6 +2,7 @@
 # Release binaries ship via GitHub Releases, built by Actions (see
 # .github/workflows/release.yml), which is what install.sh downloads.
 /target/
+SPEC.md
 
 # Local secrets / environment.
 .env

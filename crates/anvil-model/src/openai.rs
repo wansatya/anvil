@@ -132,12 +132,16 @@ impl ModelProvider for OpenAiCompatible {
                 ))
             })?
             .map_err(|e| {
+                // Include the full cause chain: reqwest's top-level Display
+                // ("error sending request for url (…)") hides the real
+                // reason (DNS, TLS unknown-issuer, proxy, …).
+                let detail = reqwest_error_chain(&e);
                 if e.is_connect() || e.is_timeout() {
-                    ModelError::Transport(e.to_string())
+                    ModelError::Transport(detail)
                 } else if e.is_body() || e.is_decode() {
-                    ModelError::Parse(e.to_string())
+                    ModelError::Parse(detail)
                 } else {
-                    ModelError::Transport(e.to_string())
+                    ModelError::Transport(detail)
                 }
             })?;
         let status = resp.status();
@@ -331,6 +335,20 @@ fn handle_sse_line(
             }
         }
     }
+}
+
+/// Full reqwest cause chain as one line, e.g.
+/// `error sending request for url (…): invalid peer certificate: UnknownIssuer`.
+fn reqwest_error_chain(e: &reqwest::Error) -> String {
+    use std::error::Error as _;
+    let mut msg = e.to_string();
+    let mut src = e.source();
+    while let Some(s) = src {
+        msg.push_str(": ");
+        msg.push_str(&s.to_string());
+        src = s.source();
+    }
+    msg
 }
 
 fn strip_spaces(mut b: &[u8]) -> &[u8] {

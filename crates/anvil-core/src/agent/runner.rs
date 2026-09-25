@@ -197,11 +197,15 @@ impl Agent {
             req.temperature = self.config.temperature;
 
             // --- stream one model turn ---
-            let mut stream = self
-                .provider
-                .chat(req, cancel.clone())
-                .await
-                .map_err(AgentError::Provider)?;
+            // A chat() failure must surface as an event: returning silently
+            // would leave the UI on "working…" forever with input blocked.
+            let mut stream = match self.provider.chat(req, cancel.clone()).await {
+                Ok(s) => s,
+                Err(e) => {
+                    send(Ev::Error(e.to_string()));
+                    return Err(AgentError::Provider(e));
+                }
+            };
             let mut text = String::new();
             let mut calls = Vec::new();
             let mut stream_failed: Option<ModelError> = None;

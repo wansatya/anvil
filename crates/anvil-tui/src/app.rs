@@ -123,6 +123,9 @@ pub struct App {
     pub should_quit: bool,
     /// Spinner frame for thinking indicator.
     pub spinner_tick: usize,
+    /// Release version shown at the right side of the footer.
+    /// Defaults to this crate's version; the binary overrides it with its own.
+    pub version: String,
     /// When the current unit of work started (for the live elapsed timer).
     pub work_started: Option<std::time::Instant>,
     /// Under-the-hood event log overlay (`/debug`).
@@ -156,6 +159,7 @@ impl App {
             status: String::new(),
             should_quit: false,
             spinner_tick: 0,
+            version: env!("CARGO_PKG_VERSION").to_string(),
             work_started: None,
             debug: false,
             event_log: std::collections::VecDeque::new(),
